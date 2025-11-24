@@ -22,21 +22,22 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
-import com.example.android.architecture.blueprints.todoapp.EventObserver
 import com.example.android.architecture.blueprints.todoapp.R
 import com.example.android.architecture.blueprints.todoapp.TodoViewModelFactory
 import com.example.android.architecture.blueprints.todoapp.databinding.TaskdetailFragBinding
 import com.example.android.architecture.blueprints.todoapp.tasks.DELETE_RESULT_OK
-import com.example.android.architecture.blueprints.todoapp.util.setupRefreshLayout
-import com.example.android.architecture.blueprints.todoapp.util.setupSnackbar
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
 
 /**
  * Main UI for the task detail screen.
@@ -51,31 +52,77 @@ class TaskDetailFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupFab()
-        view.setupSnackbar(this, viewModel.snackbarText, Snackbar.LENGTH_SHORT)
-        setupNavigation()
-        this.setupRefreshLayout(viewDataBinding.refreshLayout)
+        setupListeners()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.uiState.collect { uiState ->
+                        updateUi(uiState)
+                    }
+                }
+
+                launch {
+                    viewModel.snackbarText.collect { msgId ->
+                        Snackbar.make(view, msgId, Snackbar.LENGTH_SHORT).show()
+                    }
+                }
+
+                launch {
+                    viewModel.editTaskEvent.collect {
+                        val action = TaskDetailFragmentDirections
+                            .actionTaskDetailFragmentToAddEditTaskFragment(
+                                args.taskId,
+                                resources.getString(R.string.edit_task)
+                            )
+                        findNavController().navigate(action)
+                    }
+                }
+
+                launch {
+                    viewModel.deleteTaskEvent.collect {
+                        val action = TaskDetailFragmentDirections
+                            .actionTaskDetailFragmentToTasksFragment(DELETE_RESULT_OK)
+                        findNavController().navigate(action)
+                    }
+                }
+            }
+        }
     }
 
-    private fun setupNavigation() {
-        viewModel.deleteTaskEvent.observe(
-            viewLifecycleOwner,
-            EventObserver {
-                val action = TaskDetailFragmentDirections
-                    .actionTaskDetailFragmentToTasksFragment(DELETE_RESULT_OK)
-                findNavController().navigate(action)
-            }
-        )
-        viewModel.editTaskEvent.observe(
-            viewLifecycleOwner,
-            EventObserver {
-                val action = TaskDetailFragmentDirections
-                    .actionTaskDetailFragmentToAddEditTaskFragment(
-                        args.taskId,
-                        resources.getString(R.string.edit_task)
-                    )
-                findNavController().navigate(action)
-            }
-        )
+    private fun setupListeners() {
+        viewDataBinding.refreshLayout.setOnRefreshListener {
+            viewModel.refresh()
+        }
+        viewDataBinding.taskDetailCompleteCheckbox.setOnClickListener {
+            val checkBox = it as CheckBox
+            viewModel.setCompleted(checkBox.isChecked)
+        }
+    }
+
+    private fun updateUi(uiState: TaskDetailUiState) {
+        val binding = viewDataBinding
+
+        // Refresh Layout
+        binding.refreshLayout.isRefreshing = uiState.isLoading
+
+        if (uiState.task != null) {
+            binding.noTaskLayout.visibility = View.GONE
+            binding.taskDetailLayout.visibility = View.VISIBLE
+
+            binding.taskDetailTitleText.text = uiState.task.title
+            binding.taskDetailDescriptionText.text = uiState.task.description
+            // Avoid infinite loop if setChecked triggers listener?
+            // CheckBox.setChecked(boolean) triggers OnCheckedChangeListener if set.
+            // But we used OnClickListener in setupListeners, so setChecked() programmatically won't trigger onClick.
+            binding.taskDetailCompleteCheckbox.isChecked = uiState.isTaskCompleted
+        } else {
+            binding.taskDetailLayout.visibility = View.GONE
+            binding.noTaskLayout.visibility = View.VISIBLE
+
+            // Check isLoading to hide "No Data" text if loading
+            binding.noTaskText.visibility = if (uiState.isLoading) View.GONE else View.VISIBLE
+        }
     }
 
     private fun setupFab() {
@@ -90,9 +137,7 @@ class TaskDetailFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         val view = inflater.inflate(R.layout.taskdetail_frag, container, false)
-        viewDataBinding = TaskdetailFragBinding.bind(view).apply {
-            viewmodel = viewModel
-        }
+        viewDataBinding = TaskdetailFragBinding.bind(view)
         viewDataBinding.lifecycleOwner = this.viewLifecycleOwner
 
         viewModel.start(args.taskId)

@@ -16,21 +16,33 @@
 package com.example.android.architecture.blueprints.todoapp.taskdetail
 
 import androidx.annotation.StringRes
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.asLiveData
-import androidx.lifecycle.map
-import androidx.lifecycle.switchMap
 import androidx.lifecycle.viewModelScope
-import com.example.android.architecture.blueprints.todoapp.Event
 import com.example.android.architecture.blueprints.todoapp.R
 import com.example.android.architecture.blueprints.todoapp.data.Result
 import com.example.android.architecture.blueprints.todoapp.data.Result.Success
 import com.example.android.architecture.blueprints.todoapp.data.Task
 import com.example.android.architecture.blueprints.todoapp.data.source.TasksRepository
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/**
+ * UiState for the Details screen.
+ */
+data class TaskDetailUiState(
+    val task: Task? = null,
+    val isLoading: Boolean = false,
+    val isTaskCompleted: Boolean = false
+)
 
 /**
  * ViewModel for the Details screen.
@@ -39,45 +51,61 @@ class TaskDetailViewModel(
     private val tasksRepository: TasksRepository
 ) : ViewModel() {
 
-    private val _taskId = MutableLiveData<String>()
+    private val _taskId = MutableStateFlow<String?>(null)
 
-    private val _task = _taskId.switchMap { taskId ->
-        tasksRepository.observeTask(taskId).map { computeResult(it) }.asLiveData()
-    }
-    val task: LiveData<Task?> = _task
+    // A manual refresh signal
+    private val _isLoading = MutableStateFlow(false)
 
-    val isDataAvailable: LiveData<Boolean> = _task.map { it != null }
+    private val _editTaskEvent = MutableSharedFlow<Unit>()
+    val editTaskEvent = _editTaskEvent.asSharedFlow()
 
-    private val _dataLoading = MutableLiveData<Boolean>()
-    val dataLoading: LiveData<Boolean> = _dataLoading
+    private val _deleteTaskEvent = MutableSharedFlow<Unit>()
+    val deleteTaskEvent = _deleteTaskEvent.asSharedFlow()
 
-    private val _editTaskEvent = MutableLiveData<Event<Unit>>()
-    val editTaskEvent: LiveData<Event<Unit>> = _editTaskEvent
+    private val _snackbarText = MutableSharedFlow<Int>()
+    val snackbarText = _snackbarText.asSharedFlow()
 
-    private val _deleteTaskEvent = MutableLiveData<Event<Unit>>()
-    val deleteTaskEvent: LiveData<Event<Unit>> = _deleteTaskEvent
-
-    private val _snackbarText = MutableLiveData<Event<Int>>()
-    val snackbarText: LiveData<Event<Int>> = _snackbarText
-
-    // This LiveData depends on another so we can use a transformation.
-    val completed: LiveData<Boolean> = _task.map { input: Task? ->
-        input?.isCompleted ?: false
-    }
+    val uiState: StateFlow<TaskDetailUiState> = _taskId.flatMapLatest { taskId ->
+        if (taskId == null) {
+            flowOf(TaskDetailUiState(isLoading = false))
+        } else {
+            combine(
+                tasksRepository.observeTask(taskId),
+                _isLoading
+            ) { taskResult, isLoading ->
+                val task = (taskResult as? Success)?.data
+                // If repository emits Loading, we could show loading.
+                // But mostly we rely on the manual loading or initial load.
+                // Assuming observeTask might emit result.
+                if (taskResult is Result.Error) {
+                    _snackbarText.emit(R.string.loading_tasks_error)
+                }
+                TaskDetailUiState(
+                    task = task,
+                    isLoading = isLoading, // Or combine with taskResult is Loading
+                    isTaskCompleted = task?.isCompleted ?: false
+                )
+            }
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = TaskDetailUiState(isLoading = true)
+    )
 
     fun deleteTask() = viewModelScope.launch {
         _taskId.value?.let {
             tasksRepository.deleteTask(it)
-            _deleteTaskEvent.value = Event(Unit)
+            _deleteTaskEvent.emit(Unit)
         }
     }
 
-    fun editTask() {
-        _editTaskEvent.value = Event(Unit)
+    fun editTask() = viewModelScope.launch {
+        _editTaskEvent.emit(Unit)
     }
 
     fun setCompleted(completed: Boolean) = viewModelScope.launch {
-        val task = _task.value ?: return@launch
+        val task = uiState.value.task ?: return@launch
         if (completed) {
             tasksRepository.completeTask(task)
             showSnackbarMessage(R.string.task_marked_complete)
@@ -89,34 +117,27 @@ class TaskDetailViewModel(
 
     fun start(taskId: String?) {
         // If we're already loading or already loaded, return (might be a config change)
-        if (_dataLoading.value == true || taskId == _taskId.value) {
+        if (_taskId.value == taskId) {
             return
         }
-        // Trigger the load
         _taskId.value = taskId
-    }
-
-    private fun computeResult(taskResult: Result<Task>): Task? {
-        return if (taskResult is Success) {
-            taskResult.data
-        } else {
-            showSnackbarMessage(R.string.loading_tasks_error)
-            null
-        }
     }
 
     fun refresh() {
         // Refresh the repository and the task will be updated automatically.
-        _task.value?.let {
-            _dataLoading.value = true
+        val taskId = _taskId.value
+        if (taskId != null) {
+            _isLoading.value = true
             viewModelScope.launch {
-                tasksRepository.refreshTask(it.id)
-                _dataLoading.value = false
+                tasksRepository.refreshTask(taskId)
+                _isLoading.value = false
             }
         }
     }
 
     private fun showSnackbarMessage(@StringRes message: Int) {
-        _snackbarText.value = Event(message)
+        viewModelScope.launch {
+            _snackbarText.emit(message)
+        }
     }
 }
