@@ -31,6 +31,19 @@
     *   학습된 지식(Training Data)에만 의존하지 않습니다. 특히 Android Jetpack, Kotlin, Gradle 등 빠르게 변화하는 기술을 다룰 때는 `google_web_search`나 `get-library-docs`를 사용하여 **최신 공식 문서**를 반드시 확인합니다.
     *   Deprecated된 API 사용을 지양하고, 현재 시점의 Best Practice를 적용하도록 노력합니다.
 
+### 의존성 관리 원칙 (Dependency Management)
+
+1.  **Kotlin Compatibility First (Kotlin 호환성 최우선):**
+    *   라이브러리를 추가하거나 업데이트할 때, 해당 버전이 **현재 프로젝트의 Kotlin 버전**과 호환되는지 반드시 확인해야 합니다.
+    *   최신 라이브러리는 종종 최신 Kotlin 컴파일러를 요구하여 `Metadata version mismatch` 에러를 유발합니다.
+
+2.  **Conservative Upgrades (보수적인 업그레이드):**
+    *   사용자의 명시적인 요청이 없다면, 기존 라이브러리 버전을 임의로 최신 버전으로 올리지 않습니다.
+    *   특히 `turbine`, `coroutines`, `room`, `compose` 등 Kotlin 버전과 밀접하게 연관된 라이브러리는 주의가 필요합니다.
+
+3.  **Fallback Strategy (롤백 전략):**
+    *   라이브러리 버전 문제로 빌드 실패 시, 원인을 분석한 후 즉시 호환 가능한 **안정적인 구버전**으로 롤백합니다.
+
 This document guides the development process using Gemini, following the **Specification-Driven Development (SDD)** methodology.
 
 ## Specification-Driven Development (SDD)
