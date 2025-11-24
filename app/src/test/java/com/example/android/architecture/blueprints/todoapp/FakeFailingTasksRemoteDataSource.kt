@@ -41,8 +41,8 @@ object FakeFailingTasksRemoteDataSource : TasksDataSource {
         TODO("not implemented")
     }
 
-    override fun observeTask(taskId: String): LiveData<Result<Task>> {
-        return liveData { emit(getTask(taskId)) }
+    override fun observeTask(taskId: String): Flow<Result<Task>> {
+        return flow { emit(getTask(taskId)) }
     }
 
     override suspend fun refreshTask(taskId: String) {

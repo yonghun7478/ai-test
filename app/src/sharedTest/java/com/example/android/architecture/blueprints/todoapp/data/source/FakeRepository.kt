@@ -58,7 +58,7 @@ class FakeRepository : TasksRepository {
         return observableTasks
     }
 
-    override fun observeTask(taskId: String): LiveData<Result<Task>> {
+    override fun observeTask(taskId: String): Flow<Result<Task>> {
         runBlocking { refreshTasks() }
         return observableTasks.map { tasks ->
             when (tasks) {
@@ -70,7 +70,7 @@ class FakeRepository : TasksRepository {
                     Success(task)
                 }
             }
-        }.asLiveData()
+        }
     }
 
     override suspend fun getTask(taskId: String, forceUpdate: Boolean): Result<Task> {

@@ -31,7 +31,7 @@ interface TasksDataSource {
 
     suspend fun refreshTasks()
 
-    fun observeTask(taskId: String): LiveData<Result<Task>>
+    fun observeTask(taskId: String): Flow<Result<Task>>
 
     suspend fun getTask(taskId: String): Result<Task>
 

@@ -78,7 +78,7 @@ class FakeDataSource(var tasks: MutableList<Task>? = mutableListOf()) : TasksDat
         TODO("not implemented")
     }
 
-    override fun observeTask(taskId: String): LiveData<Result<Task>> {
+    override fun observeTask(taskId: String): Flow<Result<Task>> {
         TODO("not implemented")
     }
 

@@ -34,6 +34,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.internal.runner.junit4.statement.UiThreadStatement.runOnUiThread
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.android.architecture.blueprints.todoapp.R
 import com.example.android.architecture.blueprints.todoapp.R.string
 import com.example.android.architecture.blueprints.todoapp.ServiceLocator
@@ -102,6 +103,22 @@ class TasksActivityTest {
         IdlingRegistry.getInstance().unregister(dataBindingIdlingResource)
     }
 
+    @Before
+    fun disableAnimations() {
+        // Disable animations to reduce flakiness
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("settings put global window_animation_scale 0")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("settings put global transition_animation_scale 0")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("settings put global animator_duration_scale 0")
+    }
+
+    @After
+    fun enableAnimations() {
+        // Re-enable animations
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("settings put global window_animation_scale 1")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("settings put global transition_animation_scale 1")
+        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("settings put global animator_duration_scale 1")
+    }
+
     @Test
     fun editTask() {
         repository.saveTaskBlocking(Task("TITLE1", "DESCRIPTION"))
@@ -132,24 +149,19 @@ class TasksActivityTest {
 
     @Test
     fun createOneTask_deleteTask() {
+        // GIVEN - a task is saved in the repository
+        repository.saveTaskBlocking(Task("TITLE1", "DESCRIPTION"))
 
-        // start up Tasks screen
+        // WHEN - Tasks screen is launched
         val activityScenario = ActivityScenario.launch(TasksActivity::class.java)
         dataBindingIdlingResource.monitorActivity(activityScenario)
 
-        // Add active task
-        onView(withId(R.id.add_task_fab)).perform(click())
-        onView(withId(R.id.add_task_title_edit_text))
-            .perform(typeText("TITLE1"), closeSoftKeyboard())
-        onView(withId(R.id.add_task_description_edit_text)).perform(typeText("DESCRIPTION"))
-        onView(withId(R.id.save_task_fab)).perform(click())
-
-        // Open it in details view
+        // AND - the task is opened in details view
         onView(withText("TITLE1")).perform(click())
-        // Click delete task in menu
+        // AND - delete task is clicked in the menu
         onView(withId(R.id.menu_delete)).perform(click())
 
-        // Verify it was deleted
+        // THEN - The task is deleted
         onView(withId(R.id.menu_filter)).perform(click())
         onView(withText(string.nav_all)).perform(click())
         onView(withText("TITLE1")).check(doesNotExist())

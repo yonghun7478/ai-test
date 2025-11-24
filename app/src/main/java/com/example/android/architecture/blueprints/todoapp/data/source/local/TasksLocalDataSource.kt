@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.example.android.architecture.blueprints.todoapp.data.source.local
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.map
 import com.example.android.architecture.blueprints.todoapp.data.Result
 import com.example.android.architecture.blueprints.todoapp.data.Result.Error
 import com.example.android.architecture.blueprints.todoapp.data.Result.Success
@@ -42,25 +41,25 @@ class TasksLocalDataSource internal constructor(
         }
     }
 
-    override fun observeTask(taskId: String): LiveData<Result<Task>> {
-        return tasksDao.observeTaskById(taskId).map {
-            Success(it)
+    override suspend fun getTasks(): Result<List<Task>> = withContext(ioDispatcher) {
+        return@withContext try {
+            Success(tasksDao.getTasks())
+        } catch (e: Exception) {
+            Error(e)
         }
-    }
-
-    override suspend fun refreshTask(taskId: String) {
-        // NO-OP
     }
 
     override suspend fun refreshTasks() {
         // NO-OP
     }
 
-    override suspend fun getTasks(): Result<List<Task>> = withContext(ioDispatcher) {
-        return@withContext try {
-            Success(tasksDao.getTasks())
-        } catch (e: Exception) {
-            Error(e)
+    override fun observeTask(taskId: String): Flow<Result<Task>> {
+        return tasksDao.observeTaskById(taskId).map { task ->
+            if (task != null) {
+                Success(task)
+            } else {
+                Error(Exception("Task not found!"))
+            }
         }
     }
 
@@ -75,6 +74,10 @@ class TasksLocalDataSource internal constructor(
         } catch (e: Exception) {
             return@withContext Error(e)
         }
+    }
+
+    override suspend fun refreshTask(taskId: String) {
+        // NO-OP
     }
 
     override suspend fun saveTask(task: Task) = withContext(ioDispatcher) {

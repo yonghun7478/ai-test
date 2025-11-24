@@ -56,9 +56,18 @@ object TasksRemoteDataSource : TasksDataSource {
         return observableTasks
     }
 
-    override fun observeTask(taskId: String): LiveData<Result<Task>> {
-        // TODO: Convert to Flow
-        return MutableLiveData()
+    override fun observeTask(taskId: String): Flow<Result<Task>> {
+        return observableTasks.map { tasks ->
+            when (tasks) {
+                is Result.Loading -> Result.Loading
+                is Error -> Error(tasks.exception)
+                is Success -> {
+                    val task = tasks.data.firstOrNull() { it.id == taskId }
+                        ?: return@map Error(Exception("Not found"))
+                    Success(task)
+                }
+            }
+        }
     }
 
     override suspend fun getTasks(): Result<List<Task>> {

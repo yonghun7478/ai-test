@@ -47,7 +47,7 @@ object FakeTasksRemoteDataSource : TasksDataSource {
         return observableTasks
     }
 
-    override fun observeTask(taskId: String): LiveData<Result<Task>> {
+    override fun observeTask(taskId: String): Flow<Result<Task>> {
         return observableTasks.map { tasks ->
             when (tasks) {
                 is Result.Loading -> Result.Loading
@@ -58,7 +58,7 @@ object FakeTasksRemoteDataSource : TasksDataSource {
                     Success(task)
                 }
             }
-        }.asLiveData()
+        }
     }
 
     override suspend fun getTask(taskId: String): Result<Task> {

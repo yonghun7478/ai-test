@@ -163,12 +163,15 @@ class TaskDetailViewModelTest {
     @Test
     fun loadTask_loading() = runTest {
         // Set Main dispatcher to not run coroutines eagerly, for just this one test
-        Dispatchers.setMain(StandardTestDispatcher())
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
 
         // Load the task in the viewmodel
         taskDetailViewModel.start(task.id)
         // Start observing to compute transformations
         taskDetailViewModel.task.observeForTesting {
+            // Wait for the initial task load to complete
+            advanceUntilIdle()
+
             // Force a refresh to show the loading indicator
             taskDetailViewModel.refresh()
 
