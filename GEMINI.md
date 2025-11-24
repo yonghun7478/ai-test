@@ -42,9 +42,13 @@ SDD is a workflow where a detailed specification is created *before* any code is
 1.  **`1단계: 명세서 초안 작성 (기존과 동일)`**
     *   개발자는 기능/버그에 대한 초기 명세서를 작성합니다. 이 단계의 목표는 '무엇을' 할 것인지 정의하는 것입니다.
 
-2.  **`2단계: 명세서 분석 및 구체화 (신규)`**
-    *   **Gemini의 역할:** AI(Gemini)는 작성된 명세서 초안을 분석하여 잠재적인 **부작용(side-effects), 의존성(dependencies), 누락된 요구사항**을 식별합니다.
-    *   **결과물:** 분석 결과를 바탕으로 명세서를 더욱 구체화하고, `영향 분석 및 위험 요소` 섹션을 추가하여 명세서를 보강합니다. 이 단계는 '어떻게' 구현할지에 대한 깊이 있는 고민과 잠재적 문제점을 사전에 파악하는 과정입니다.
+2.  **`2단계: 심층 영향 분석 및 기술 설계 (Deep Impact Analysis & Technical Design)`**
+    *   **Gemini의 핵심 역할:** AI(Gemini)는 `codebase_investigator`를 사용하여 작성된 명세서가 전체 코드베이스에 미칠 영향을 **파일 및 코드 레벨에서 정밀하게 분석**합니다.
+    *   **필수 분석 항목:**
+        *   **파급 효과(Ripple Effect):** 인터페이스나 공용 클래스 변경 시, 이에 의존하는 **모든** 파일과 모듈을 식별해야 합니다. (예: "Repository 반환 타입 변경 시, 이를 사용하는 A, B, C ViewModel과 관련 테스트 코드 5개가 깨짐")
+        *   **마이그레이션 전략(Mitigation Strategy):** 식별된 파급 효과를 어떻게 처리할지 구체적인 대처 방안을 제시해야 합니다. (예: "A ViewModel은 리팩토링 대상이므로 Flow로 전환하고, B, C는 리팩토링 범위 밖이므로 `asLiveData()` 어댑터를 사용하여 기존 로직 유지")
+        *   **테스트 영향:** 어떤 테스트가 깨질 것이며, 이를 수정하기 위해 새로운 테스트 유틸리티나 라이브러리가 필요한지 분석합니다.
+    *   **결과물:** 분석 결과를 바탕으로 명세서에 `심층 영향 분석 및 대처 방안` 섹션을 상세히 작성하여 보강합니다. 개발자는 이 분석이 충분히 구체적인지 리뷰합니다.
 
 3.  **`3단계: 작업 계획 수립 (신규)`**
     *   **Gemini와 개발자의 역할:** 구체화된 명세서를 바탕으로, 전체 작업을 **리뷰어가 검토하기 용이한 작은 단위**로 나눕니다. 각 단위는 독립적으로 구현하고 테스트할 수 있어야 이상적입니다.
@@ -95,17 +99,28 @@ A checklist of specific, testable requirements. The feature is "done" when all t
 - **Implementation Notes:** (Any specific libraries to use, patterns to follow, or technical considerations)
 - **Things to Avoid:** (Any anti-patterns or incorrect approaches to steer the AI away from)
 
-### 영향 분석 및 위험 요소 (Impact Analysis & Risks):
+### 심층 영향 분석 및 대처 방안 (Deep Impact Analysis & Mitigation):
 
-이 섹션은 명세서 분석 단계(2단계)에서 채워집니다.
+이 섹션은 명세서 분석 단계(2단계)에서 Gemini에 의해 작성됩니다.
 
-- **예상되는 부작용:** (e.g., 이 변경으로 인해 'X' 기능의 데이터 로딩 속도가 저하될 수 있습니다.)
-- **영향을 받는 다른 기능/모듈:** (e.g., 'Y' 모듈의 'Z' 함수 동작에 영향을 줄 수 있습니다.)
-- **테스트 전략:** (e.g., 신규 단위 테스트 3개, 'A' 기능에 대한 회귀 테스트 필요.)
+- **영향을 받는 파일 목록 (Affected Files):**
+    - `path/to/Interface.kt` (Signature 변경)
+    - `path/to/Implementation.kt` (Override 구현 필요)
+    - `path/to/UsageClass.kt` (호출부 수정 필요 - 컴파일 에러 예상)
+    - `path/to/Test.kt` (테스트 로직 수정 필요)
+
+- **파급 효과 및 리스크 (Ripple Effects & Risks):**
+    - (e.g., `TasksDataSource`의 리턴 타입을 변경하면, 이를 구현하는 Mock, Fake, Prod 구현체 4개가 모두 깨집니다.)
+    - (e.g., DataBinding이 `LiveData`를 참조하고 있어, `Flow`로 변경 시 XML 수정이나 별도의 바인딩 어댑터가 필요할 수 있습니다.)
+
+- **구체적인 대처 방안 (Mitigation Strategy):**
+    - **대상 범위 외 코드:** (e.g., `StatisticsViewModel`은 이번 리팩토링 대상이 아니므로, Repository 호출 결과에 `.asLiveData()`를 붙여 기존 코드를 건드리지 않고 호환성을 유지합니다.)
+    - **테스트:** (e.g., `LiveDataTestUtil` 대신 `turbine` 라이브러리를 사용하여 Flow를 테스트합니다.)
+    - **점진적 적용:** (e.g., 인터페이스에 `Deprecated`된 기존 메서드를 남겨두고 새 메서드를 추가하는 방식 대신, 한 번에 교체하되 `Todo` 주석으로 마이그레이션 지점을 표시합니다.)
+
 - **작업 분할 계획 (Sub-task Plan):**
-    - [ ] 1. Task 모델에 'completedDate' 필드 추가 및 데이터베이스 마이그레이션 스크립트 작성
-    - [ ] 2. 'completeTask' 비즈니스 로직에 'completedDate'를 기록하도록 업데이트
-    - [ ] 3. UI에 완료된 날짜를 표시하고, 관련 테스트 코드 작성
+    - [ ] 1. `TasksDataSource` 인터페이스 변경 및 `FakeRepository` 컴파일 에러 수정
+    - [ ] 2. `TasksViewModel` 내부 로직 `Flow`로 전환
 ```
 
 ### Example Specification

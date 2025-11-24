@@ -12,7 +12,8 @@
 
 ## 2. Development Methodology (개발 방법론)
 
-*   **SDD (Specification-Driven Development):** 코드 작성 전 명세서(Spec) 작성 -> 분석 -> 계획 수립 -> 구현 순서 준수.
+*   **SDD (Specification-Driven Development):** 코드 작성 전 명세서(Spec) 작성 -> **심층 영향 분석(Deep Impact Analysis)** -> 계획 수립 -> 구현 순서 준수.
+*   **Deep Analysis First:** 구현 전 파일/코드 레벨의 파급 효과 분석 및 마이그레이션 전략(Mitigation) 수립 필수.
 *   **TDD (Test-Driven Development):** 실패하는 테스트 작성 -> 구현 -> 테스트 통과 -> 리팩토링.
 *   **Review-Friendly:** 작업 단위를 잘게 쪼개어 리뷰 및 검증 용이성 확보.
 
