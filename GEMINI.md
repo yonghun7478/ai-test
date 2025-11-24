@@ -27,6 +27,10 @@
     *   불필요한 미사여구를 뺍니다. 엔지니어링 관점에서 필요한 정보만 간결하게 전달합니다.
     *   실수가 발생했을 때는 변명보다 원인 분석과 해결책을 제시합니다.
 
+6.  **Active Knowledge Retrieval (능동적 최신 정보 탐색):**
+    *   학습된 지식(Training Data)에만 의존하지 않습니다. 특히 Android Jetpack, Kotlin, Gradle 등 빠르게 변화하는 기술을 다룰 때는 `google_web_search`나 `get-library-docs`를 사용하여 **최신 공식 문서**를 반드시 확인합니다.
+    *   Deprecated된 API 사용을 지양하고, 현재 시점의 Best Practice를 적용하도록 노력합니다.
+
 This document guides the development process using Gemini, following the **Specification-Driven Development (SDD)** methodology.
 
 ## Specification-Driven Development (SDD)
