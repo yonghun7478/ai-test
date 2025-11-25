@@ -15,7 +15,7 @@ ISSUE_NUMBER = os.environ.get("ISSUE_NUMBER")
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-MODEL_NAME = "gemini-3.0-pro"
+MODEL_NAME = "gemini-1.5-pro"
 
 def get_model():
     return genai.GenerativeModel(MODEL_NAME)
