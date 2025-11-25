@@ -37,13 +37,23 @@ jobs:
         run: |
           pip install -r automation/requirements.txt
 
-      - name: Run Gemini Agent (Implement Mode)
+      - name: Debug and Run
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
+          echo "=== DEBUG INFO START ==="
+          echo "Current directory: $(pwd)"
+          ls -R automation/
+          echo "Checking python version:"
+          python --version
+          echo "Checking file content (first 20 lines):"
+          head -n 20 automation/gemini_agent.py
+          echo "=== DEBUG INFO END ==="
+          
+          echo "Running script now..."
           python -u automation/gemini_agent.py implement
 
       - name: Create Pull Request
