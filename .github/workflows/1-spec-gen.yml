@@ -1,0 +1,35 @@
+name: 1. Generate Specification
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  generate-spec:
+    if: (github.event_name == 'issues') || (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/spec'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r automation/requirements.txt
+
+      - name: Run Gemini Agent (Spec Mode)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python automation/gemini_agent.py spec
