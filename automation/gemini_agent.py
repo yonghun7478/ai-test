@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import subprocess
+import re
 import google.generativeai as genai
 from github import Github
 from github import Auth
@@ -50,7 +51,7 @@ def generate_spec(issue_body):
     prompt = f"""
     You are a Senior Android Architect.
     Create a detailed technical specification based on the following feature request (GitHub Issue).
-    Follow the 'Specification Template' strictly. 
+    Follow the 'Specification Template' strictly.
     
     Template:
     ### Feature/Bug Name: ...
@@ -67,19 +68,28 @@ def generate_spec(issue_body):
     response = model.generate_content(prompt)
     return response.text
 
-def implement_feature(spec_content):
+def implement_feature(spec_content, task_id=None):
     """
     Orchestrates the Stub -> Test -> Implement loop.
-    For simplicity in this POC, we will focus on generating one main implementation file and one test file,
-    or we need the LLM to output multiple files in a structured way (e.g., JSON or delimited).
+    If task_id is provided, focuses ONLY on that sub-task.
     """
     model = get_model()
     
+    focus_instruction = ""
+    if task_id:
+        focus_instruction = f"""
+        IMPORTANT: You are implementing ONLY Sub-task #{task_id} from the 'Sub-task Plan' section of the specification.
+        Ignore other sub-tasks for now. Focus only on the requirements for Sub-task #{task_id}.
+        """
+        print(f"--- Implementing Sub-task #{task_id} ---")
+
     # 1. Generate Stubs
     print("--- Phase 1: Generating Stubs ---")
     stub_prompt = f"""
     Based on this specification, generate the MINIMAL STUB CODE (interfaces, empty classes, method signatures) 
     required to write a compiling test. Do not implement logic yet.
+    
+    {focus_instruction}
     
     Specification:
     {spec_content}
@@ -98,6 +108,8 @@ def implement_feature(spec_content):
     Based on the specification and the stubs you just created, write Unit Tests.
     The tests should compile but FAIL (Red state) because logic is missing.
     
+    {focus_instruction}
+    
     Specification:
     {spec_content}
     
@@ -114,21 +126,19 @@ def implement_feature(spec_content):
     for attempt in range(1, max_retries + 1):
         print(f"Attempt {attempt}/{max_retries}: Running tests...")
         
-        # Run specific tests if possible, or all unit tests
-        # In a real scenario, we'd extract the test class name to run only that.
-        # For now, we run all unit tests (can be slow, but safe).
         stdout, stderr, returncode = run_command("./gradlew testDebugUnitTest")
         
         if returncode == 0:
             print("Tests PASSED! Implementation complete.")
             return True
         
-        print("Tests FAILED. Analyzing error...")
-        # Truncate stderr if too long
+        print(f"Tests FAILED. Analyzing error...")
         error_log = (stderr + stdout)[-5000:] 
         
         fix_prompt = f"""
         The tests failed. Please fix the implementation code.
+        
+        {focus_instruction}
         
         Specification:
         {spec_content}
@@ -172,8 +182,7 @@ def main():
             print("Error: Github credentials/context missing.")
             sys.exit(1)
             
-        auth = Auth.Token(GITHUB_TOKEN)
-        g = Github(auth=auth)
+        g = Github(GITHUB_TOKEN)
         repo = g.get_repo(REPO_NAME)
         issue = repo.get_issue(int(ISSUE_NUMBER))
         
@@ -208,9 +217,14 @@ def main():
             print("Error: No valid specification found in issue comments.")
             sys.exit(1)
 
-        success = implement_feature(spec_content)
+        # Parse task_id from comment body if available
+        comment_body = os.environ.get("COMMENT_BODY", "")
+        task_id = None
+        match = re.search(r'/implement\s+(\d+)', comment_body)
+        if match:
+            task_id = match.group(1)
+            print(f"Detected request for Sub-task #{task_id}")
+
+        success = implement_feature(spec_content, task_id)
         if not success:
             sys.exit(1) # Fail the workflow
-
-if __name__ == "__main__":
-    main()
