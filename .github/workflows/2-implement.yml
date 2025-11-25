@@ -41,7 +41,7 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          python automation/gemini_agent.py implement
+          python -u automation/gemini_agent.py implement
 
       - name: Create Pull Request
         if: success()

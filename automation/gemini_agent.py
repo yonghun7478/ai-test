@@ -173,6 +173,7 @@ def parse_and_write_files(llm_output):
 # --- Main Entry Point ---
 
 def main():
+    print("Script started.", flush=True) # Immediate log
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=["spec", "implement"])
     args = parser.parse_args()
