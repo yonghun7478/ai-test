@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import google.generativeai as genai
 from github import Github
+from github import Auth
 
 # --- Configuration ---
 API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -14,7 +15,7 @@ ISSUE_NUMBER = os.environ.get("ISSUE_NUMBER")
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-MODEL_NAME = "gemini-1.5-pro-latest" # Use a capable model
+MODEL_NAME = "gemini-1.5-pro"
 
 def get_model():
     return genai.GenerativeModel(MODEL_NAME)
@@ -171,7 +172,8 @@ def main():
             print("Error: Github credentials/context missing.")
             sys.exit(1)
             
-        g = Github(GITHUB_TOKEN)
+        auth = Auth.Token(GITHUB_TOKEN)
+        g = Github(auth=auth)
         repo = g.get_repo(REPO_NAME)
         issue = repo.get_issue(int(ISSUE_NUMBER))
         
@@ -190,7 +192,8 @@ def main():
         spec_content = read_file("CURRENT_SPEC.md")
         if not spec_content and GITHUB_TOKEN and ISSUE_NUMBER:
              # Try fetching from issue
-             g = Github(GITHUB_TOKEN)
+             auth = Auth.Token(GITHUB_TOKEN)
+        g = Github(auth=auth)
              repo = g.get_repo(REPO_NAME)
              issue = repo.get_issue(int(ISSUE_NUMBER))
              # Naive: get last comment
