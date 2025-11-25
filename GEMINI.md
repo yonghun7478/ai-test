@@ -73,7 +73,13 @@ SDD is a workflow where a detailed specification is created *before* any code is
 4.  **`4단계: 점진적 구현 및 테스트 (Stub -> Test -> Implement)`**
     *   Gemini는 수립된 작업 계획에 따라 한 번에 하나의 작업 단위만 처리합니다.
     *   **4-1. 인터페이스(Stub) 구현:** 테스트 코드가 컴파일될 수 있도록, 클래스, 메서드 시그니처 등 최소한의 껍데기(Stub) 코드를 먼저 작성합니다.
-    *   **4-2. 테스트 작성:** 명세서의 요구사항을 검증하는 테스트 코드를 작성합니다. 이 시점에서 테스트는 컴파일은 되지만 실행 시 실패해야 합니다 (Red).
+    *   **4-2. 테스트 작성:** 명세서의 요구사항을 검증하는 테스트 코드를 작성합니다.
+        *   **Test Type:** CI 속도를 위해 **Local Unit Test (JUnit)**를 우선합니다. (`androidTest` 대신 `test` 경로 사용)
+        *   **File Strategy:**
+            *   대상 클래스에 대한 테스트 파일이 이미 존재하면(예: `TasksViewModelTest.kt`), 해당 파일에 **새로운 테스트 함수를 추가**합니다. (기존 테스트 삭제 금지)
+            *   파일이 없다면 새로 생성합니다.
+        *   **Context Awareness:** 기존 프로젝트의 테스트 유틸리티(예: `MainCoroutineRule`, `getOrAwaitValue`)와 모킹 라이브러리(MockK/Mockito) 사용 패턴을 그대로 따라야 합니다.
+        *   이 시점에서 테스트는 컴파일은 되지만 실행 시 실패해야 합니다 (Red).
     *   **4-3. 구현 및 자동 수정 (Auto-Correction Loop):**
         *   테스트를 통과시키기 위한 실제 로직을 구현합니다 (Green).
         *   **자동 수정 루프:** 테스트 실행 후 실패 시, 에러 로그를 분석하여 코드를 수정하고 재시도합니다.
