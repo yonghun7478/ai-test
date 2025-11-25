@@ -194,6 +194,8 @@ def main():
         print("Spec posted to issue.")
 
     elif args.mode == "implement":
+        print(f"Starting implementation mode for Issue #{ISSUE_NUMBER}")
+        
         # In a real workflow, we might read the approved spec from a file or the issue comment.
         # For this POC, let's assume spec is passed via a file 'CURRENT_SPEC.md' 
         # or we read the last comment from the issue.
@@ -205,9 +207,11 @@ def main():
              repo = g.get_repo(REPO_NAME)
              issue = repo.get_issue(int(ISSUE_NUMBER))
              
+             print("Searching for specification in comments...")
              # Find the latest comment that looks like a spec
-             comments = issue.get_comments().reversed
-             for comment in comments:
+             comments = list(issue.get_comments()) # Convert to list to reverse easily
+             for comment in reversed(comments):
+                 print(f"Checking comment ID {comment.id}: {comment.body[:50]}...")
                  if "### Feature/Bug Name" in comment.body or "## Generated Specification" in comment.body:
                      spec_content = comment.body
                      print(f"Found specification in comment ID {comment.id}")
@@ -219,11 +223,15 @@ def main():
 
         # Parse task_id from comment body if available
         comment_body = os.environ.get("COMMENT_BODY", "")
+        print(f"Received comment body: {comment_body}")
+        
         task_id = None
         match = re.search(r'/implement\s+(\d+)', comment_body)
         if match:
             task_id = match.group(1)
             print(f"Detected request for Sub-task #{task_id}")
+        else:
+            print("No sub-task ID detected, implementing full spec.")
 
         success = implement_feature(spec_content, task_id)
         if not success:
