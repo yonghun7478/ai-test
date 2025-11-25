@@ -192,15 +192,20 @@ def main():
         spec_content = read_file("CURRENT_SPEC.md")
         if not spec_content and GITHUB_TOKEN and ISSUE_NUMBER:
              # Try fetching from issue
-             auth = Auth.Token(GITHUB_TOKEN)
-        g = Github(auth=auth)
+             g = Github(auth=Auth.Token(GITHUB_TOKEN))
              repo = g.get_repo(REPO_NAME)
              issue = repo.get_issue(int(ISSUE_NUMBER))
-             # Naive: get last comment
-             spec_content = issue.get_comments().reversed[0].body
+             
+             # Find the latest comment that looks like a spec
+             comments = issue.get_comments().reversed
+             for comment in comments:
+                 if "### Feature/Bug Name" in comment.body or "## Generated Specification" in comment.body:
+                     spec_content = comment.body
+                     print(f"Found specification in comment ID {comment.id}")
+                     break
         
         if not spec_content:
-            print("Error: No spec content found.")
+            print("Error: No valid specification found in issue comments.")
             sys.exit(1)
 
         success = implement_feature(spec_content)
