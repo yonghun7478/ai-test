@@ -117,56 +117,40 @@ def implement_feature(spec_content, api_key):
     test_response = generate_content_safe(MODEL_3_0, test_prompt, api_key)
     parse_and_write_files(test_response.text)
 
-    # 3. Implementation Loop
-    print("--- Phase 3: Implementation & Auto-fix Loop ---", flush=True)
-    max_retries = 3
-    test_result = "UNKNOWN"
-    final_error_log = ""
-
-    for attempt in range(1, max_retries + 1):
-        print(f"Attempt {attempt}/{max_retries}: Running tests...", flush=True)
-        stdout, stderr, returncode = run_command("./gradlew testDebugUnitTest")
-        
-        if returncode == 0:
-            print("Tests PASSED!", flush=True)
-            test_result = "PASSED"
-            break
-        
-        print(f"Tests FAILED. Analyzing...", flush=True)
-        final_error_log = (stderr + stdout)[-5000:]
-        
-        if attempt == max_retries:
-            test_result = "FAILED"
-            break
-
-        fix_prompt = f"""
-        The tests failed. Fix the implementation.
-        
-        Specification:
-        {spec_content}
-        
-        Error Log:
-        {final_error_log}
-        
-        Output format:
-        ### FILE: path/to/file.kt
-        (Content)
-        """
-        fix_response = generate_content_safe(MODEL_3_0, fix_prompt, api_key)
-        parse_and_write_files(fix_response.text)
+    # 3. Implement Logic (One-Shot)
+    print("--- Phase 3: Implementing Logic ---", flush=True)
+    impl_prompt = f"""
+    Now that Stubs and Tests are in place, please provide the COMPLETE IMPLEMENTATION logic.
+    Fill in the function bodies and ensure the code compiles and passes the tests.
     
+    Specification:
+    {spec_content}
+    
+    Output format:
+    ### FILE: path/to/file.kt
+    (Content)
+    """
+    impl_response = generate_content_safe(MODEL_3_0, impl_prompt, api_key)
+    parse_and_write_files(impl_response.text)
+
+    # 4. Final Verification (Run Once)
+    print("--- Phase 4: Final Verification ---", flush=True)
+    stdout, stderr, returncode = run_command("./gradlew testDebugUnitTest")
+    
+    test_result = "PASSED" if returncode == 0 else "FAILED"
+    log_content = (stdout + stderr)[-5000:]
+    
+    print(f"Tests finished with status: {test_result}", flush=True)
+
     # Write Report
     report = f"""
 # Implementation Result
 
 **Status:** {test_result}
 
-## Details
-- Max Retries: {max_retries}
-
-## Last Error Log (if failed)
+## Test Logs
 ```
-{final_error_log}
+{log_content}
 ```
     """
     write_file("implementation_result.md", report)
