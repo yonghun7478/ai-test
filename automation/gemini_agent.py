@@ -8,7 +8,7 @@ from github import Github
 from github import Auth
 
 # --- Configuration ---
-MODEL_3_0 = "gemini-1.5-pro-latest" # Updated to latest stable
+MODEL_3_0 = "gemini-1.5-pro" # Fixed: gemini-1.5-pro-latest is invalid
 MODEL_1_5 = "gemini-1.5-pro"
 
 def get_model(api_key):
