@@ -1,18 +1,17 @@
 name: 1. Generate Specification
 
 on:
-  issues:
-    types: [opened]
   issue_comment:
     types: [created]
 
 jobs:
   generate-spec:
-    if: (github.event_name == 'issues') || (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/spec'))
+    if: contains(github.event.comment.body, '/spec')
     runs-on: ubuntu-latest
     permissions:
+      contents: write
+      pull-requests: write
       issues: write
-      contents: read
 
     steps:
       - uses: actions/checkout@v3
@@ -27,9 +26,25 @@ jobs:
           pip install -r automation/requirements.txt
 
       - name: Run Gemini Agent (Spec Mode)
+        id: run_gemini
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           python automation/gemini_agent.py spec
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "docs: Add specification for Issue #${{ github.event.issue.number }}"
+          title: "docs: Specification for Issue #${{ github.event.issue.number }}"
+          body: |
+            Auto-generated specification based on Issue #${{ github.event.issue.number }}.
+            
+            Please review the specification in `docs/specs/`.
+            Once merged, the implementation workflow will trigger automatically.
+          branch: "spec/issue-${{ github.event.issue.number }}"
+          base: main
+          delete-branch: true

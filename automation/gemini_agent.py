@@ -8,15 +8,11 @@ from github import Github
 from github import Auth
 
 # --- Configuration ---
-# Move configuration reading inside functions or main to avoid global scope issues
-# API_KEY = os.environ.get("GEMINI_API_KEY") 
-
-MODEL_3_0 = "gemini-3-pro-preview"
+MODEL_3_0 = "gemini-1.5-pro-latest" # Updated to latest stable
 MODEL_1_5 = "gemini-1.5-pro"
 
 def get_model(api_key):
     genai.configure(api_key=api_key)
-    # Return the model name string, instantiation happens later to handle fallbacks
     return MODEL_3_0
 
 def run_command(command):
@@ -36,18 +32,15 @@ def read_file(path):
         return None
 
 def write_file(path, content):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    dirname = os.path.dirname(path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
     with open(path, 'w') as f:
         f.write(content)
     print(f"Wrote to {path}", flush=True)
 
 def generate_content_safe(model_name, prompt, api_key):
-    """
-    Attempts to generate content with the primary model.
-    If it fails (e.g., 404 Not Found), falls back to the stable 1.5 model.
-    """
     genai.configure(api_key=api_key)
-    
     try:
         print(f"Attempting to generate with model: {model_name}", flush=True)
         model = genai.GenerativeModel(model_name)
@@ -55,34 +48,36 @@ def generate_content_safe(model_name, prompt, api_key):
         return response
     except Exception as e:
         print(f"Error with model {model_name}: {e}", flush=True)
-        if model_name != MODEL_1_5:
-            print(f"Falling back to stable model: {MODEL_1_5}", flush=True)
-            try:
-                fallback_model = genai.GenerativeModel(MODEL_1_5)
-                response = fallback_model.generate_content(prompt)
-                return response
-            except Exception as fallback_error:
-                print(f"Fallback model also failed: {fallback_error}", flush=True)
-                raise fallback_error
+        # Fallback logic could be added here
         raise e
 
 # --- AI Logic ---
 
 def generate_spec(issue_body, api_key):
-    """Generates a technical specification from an issue description."""
     prompt = f"""
     You are a Senior Android Architect.
     Create a detailed technical specification based on the following feature request (GitHub Issue).
-    Follow the 'Specification Template' strictly.
+    
+    Format the output as Markdown.
     
     Template:
-    ### Feature/Bug Name: ...
-    ### Objective: ...
-    ### User Story / Scenario: ...
-    ### Acceptance Criteria: ...
-    ### Technical Details / Constraints: ...
-    ### Deep Impact Analysis & Mitigation: ...
-    ### Sub-task Plan: ...
+    # Specification: [Feature Name]
+
+    ### Objective
+    ...
+
+    ### User Story
+    ...
+
+    ### Acceptance Criteria
+    - [ ] ...
+
+    ### Technical Details
+    - **Files:** ...
+    
+    ### Implementation Plan
+    1. ...
+    2. ...
 
     Issue Description:
     {issue_body}
@@ -90,33 +85,16 @@ def generate_spec(issue_body, api_key):
     response = generate_content_safe(MODEL_3_0, prompt, api_key)
     return response.text
 
-def implement_feature(spec_content, task_id, api_key):
-    """
-    Orchestrates the Stub -> Test -> Implement loop.
-    If task_id is provided, focuses ONLY on that sub-task.
-    """
-    
-    focus_instruction = ""
-    if task_id:
-        focus_instruction = f"""
-        IMPORTANT: You are implementing ONLY Sub-task #{task_id} from the 'Sub-task Plan' section of the specification.
-        Ignore other sub-tasks for now. Focus only on the requirements for Sub-task #{task_id}.
-        """
-        print(f"--- Implementing Sub-task #{task_id} ---", flush=True)
-
+def implement_feature(spec_content, api_key):
     # 1. Generate Stubs
     print("--- Phase 1: Generating Stubs ---", flush=True)
     stub_prompt = f"""
-    Based on this specification, generate the MINIMAL STUB CODE (interfaces, empty classes, method signatures) 
-    required to write a compiling test. Do not implement logic yet.
-    
-    {focus_instruction}
+    Based on this specification, generate the MINIMAL STUB CODE (interfaces, empty classes, method signatures).
     
     Specification:
     {spec_content}
     
     Output format:
-    Please provide the code for each file separated by:
     ### FILE: path/to/file.kt
     (Content)
     """
@@ -126,10 +104,8 @@ def implement_feature(spec_content, task_id, api_key):
     # 2. Generate Tests
     print("--- Phase 2: Generating Tests ---", flush=True)
     test_prompt = f"""
-    Based on the specification and the stubs you just created, write Unit Tests.
-    The tests should compile but FAIL (Red state) because logic is missing.
-    
-    {focus_instruction}
+    Based on the specification and stubs, write Unit Tests.
+    The tests should compile but FAIL (Red state).
     
     Specification:
     {spec_content}
@@ -143,57 +119,73 @@ def implement_feature(spec_content, task_id, api_key):
 
     # 3. Implementation Loop
     print("--- Phase 3: Implementation & Auto-fix Loop ---", flush=True)
-    max_retries = 5
+    max_retries = 3
+    test_result = "UNKNOWN"
+    final_error_log = ""
+
     for attempt in range(1, max_retries + 1):
         print(f"Attempt {attempt}/{max_retries}: Running tests...", flush=True)
-        
         stdout, stderr, returncode = run_command("./gradlew testDebugUnitTest")
         
         if returncode == 0:
-            print("Tests PASSED! Implementation complete.", flush=True)
-            return True
+            print("Tests PASSED!", flush=True)
+            test_result = "PASSED"
+            break
         
-        print(f"Tests FAILED. Analyzing error...", flush=True)
-        error_log = (stderr + stdout)[-5000:] 
+        print(f"Tests FAILED. Analyzing...", flush=True)
+        final_error_log = (stderr + stdout)[-5000:]
         
+        if attempt == max_retries:
+            test_result = "FAILED"
+            break
+
         fix_prompt = f"""
-        The tests failed. Please fix the implementation code.
-        
-        {focus_instruction}
+        The tests failed. Fix the implementation.
         
         Specification:
         {spec_content}
         
         Error Log:
-        {error_log}
+        {final_error_log}
         
-        Provide the corrected full code for the modified files.
         Output format:
         ### FILE: path/to/file.kt
         (Content)
         """
-        
         fix_response = generate_content_safe(MODEL_3_0, fix_prompt, api_key)
         parse_and_write_files(fix_response.text)
     
-    print("Max retries reached. Implementation failed.", flush=True)
-    return False
+    # Write Report
+    report = f"""
+# Implementation Result
+
+**Status:** {test_result}
+
+## Details
+- Max Retries: {max_retries}
+
+## Last Error Log (if failed)
+```
+{final_error_log}
+```
+    """
+    write_file("implementation_result.md", report)
+    return True # Always return true to allow PR creation
 
 def parse_and_write_files(llm_output):
-    """Parses custom delimited output from LLM and writes files."""
     parts = llm_output.split("### FILE: ")
-    for part in parts[1:]: # Skip preamble
+    for part in parts[1:]:
         lines = part.splitlines()
         filepath = lines[0].strip()
         content = "\n".join(lines[1:])
-        content = content.replace("```kotlin", "").replace("```", "")
+        # Basic cleanup of markdown code blocks
+        content = re.sub(r'^```\w*\n', '', content)
+        content = re.sub(r'\n```$', '', content)
         write_file(filepath.strip(), content)
 
-# --- Main Entry Point ---
+# --- Main ---
 
 def main():
-    print("Script started.", flush=True)
-    
     API_KEY = os.environ.get("GEMINI_API_KEY")
     GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
     REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
@@ -209,55 +201,39 @@ def main():
 
     if args.mode == "spec":
         if not GITHUB_TOKEN or not REPO_NAME or not ISSUE_NUMBER:
-            print("Error: Github credentials/context missing.", flush=True)
+            print("Error: Github context missing.", flush=True)
             sys.exit(1)
             
         g = Github(auth=Auth.Token(GITHUB_TOKEN))
         repo = g.get_repo(REPO_NAME)
         issue = repo.get_issue(int(ISSUE_NUMBER))
         
-        print(f"Generating spec for Issue #{ISSUE_NUMBER}: {issue.title}", flush=True)
+        print(f"Generating spec for Issue #{ISSUE_NUMBER}", flush=True)
         spec = generate_spec(issue.body, API_KEY)
         
-        issue.create_comment(f"## Generated Specification\n\n{spec}\n\nplease review and approve with /implement")
-        print("Spec posted to issue.", flush=True)
+        # Write spec to file
+        file_path = f"docs/specs/issue-{ISSUE_NUMBER}.md"
+        write_file(file_path, spec)
+        print(f"::set-output name=spec_path::{file_path}") # For Github Actions
 
     elif args.mode == "implement":
-        print(f"Starting implementation mode for Issue #{ISSUE_NUMBER}", flush=True)
+        # In this flow, we assume the spec is already in the repo (merged)
+        # We look for docs/specs/issue-{ISSUE_NUMBER}.md
         
-        spec_content = read_file("CURRENT_SPEC.md")
-        if not spec_content and GITHUB_TOKEN and ISSUE_NUMBER:
-             g = Github(auth=Auth.Token(GITHUB_TOKEN))
-             repo = g.get_repo(REPO_NAME)
-             issue = repo.get_issue(int(ISSUE_NUMBER))
-             
-             print("Searching for specification in comments...", flush=True)
-             comments = list(issue.get_comments())
-             for comment in reversed(comments):
-                 print(f"Checking comment ID {comment.id}: {comment.body[:50]}...", flush=True)
-                 if "### Feature/Bug Name" in comment.body or "## Generated Specification" in comment.body:
-                     spec_content = comment.body
-                     print(f"Found specification in comment ID {comment.id}", flush=True)
-                     break
+        if not ISSUE_NUMBER:
+             print("Error: ISSUE_NUMBER env var required to find the spec.", flush=True)
+             sys.exit(1)
+
+        spec_path = f"docs/specs/issue-{ISSUE_NUMBER}.md"
+        spec_content = read_file(spec_path)
         
         if not spec_content:
-            print("Error: No valid specification found in issue comments.", flush=True)
+            print(f"Error: Spec file not found at {spec_path}", flush=True)
+            # Try to fail gracefully or exit? 
+            # The user wants a PR regardless, but without a spec we can't do anything.
             sys.exit(1)
 
-        comment_body = os.environ.get("COMMENT_BODY", "")
-        print(f"Received comment body: {comment_body}", flush=True)
-        
-        task_id = None
-        match = re.search(r'/implement\s+(\d+)', comment_body)
-        if match:
-            task_id = match.group(1)
-            print(f"Detected request for Sub-task #{task_id}", flush=True)
-        else:
-            print("No sub-task ID detected, implementing full spec.", flush=True)
-
-        success = implement_feature(spec_content, task_id, API_KEY)
-        if not success:
-            sys.exit(1)
+        implement_feature(spec_content, API_KEY)
 
 if __name__ == "__main__":
     main()
