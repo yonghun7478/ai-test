@@ -49,28 +49,46 @@ def plan_epic(issue, api_key):
     
     prompt = f"""
     You are a Senior Android Architect.
-    The user has created an Epic Issue. Your goal is to analyze the requirements and propose a breakdown of Tasks (Sub-issues).
+    The user has created an Epic Issue. Your goal is to analyze the requirements and propose a breakdown of Tasks (Sub-issues) following Strict SDD (Spec-Driven Development).
 
     Epic Title: {issue.title}
     Epic Description:
     {issue.body}
 
-    Please provide a detailed plan in the following JSON format embedded in a Markdown comment: 
-    
-    Start your response with a brief analysis (text), then provide the tasks inside a JSON block.
+    IMPORTANT: You must follow this structure in your response.
 
-    Example Output:
-    Based on the requirements, here is the breakdown...
+    ### Part 1: AS-IS/TO-BE Analysis & Design
+    (Write this part as normal Markdown text BEFORE the JSON block)
+    
+    1.  **AS-IS Analysis (Current State):**
+        *   Analyze the current codebase structure relevant to this Epic.
+        *   Identify specific files, classes, and dependencies that are involved.
+        *   **Impact Analysis:** List existing tests or components that might break.
+    
+    2.  **TO-BE Design (Target Architecture):**
+        *   Describe the proposed architectural changes (e.g., UDF, Clean Architecture).
+        *   Define new components (UseCases, UiStates, Mappers).
+        *   Explain the data flow.
+
+    ### Part 2: Task Breakdown (JSON)
+    (Provide the tasks in a strict JSON format)
+    
+    *   Break down the work into small, reviewer-friendly tasks (10-15 min review time).
+    *   **Do NOT** create a task for "Design" or "Analysis". Part 1 covers that.
+    *   Each task `body` **MUST** include:
+        *   `## Implementation Details`: Exactly what files to change and how.
+        *   `## Test Plan`: Specifics on what tests to add/modify (New file? Existing file? Mocking strategy?).
+
+    Example Output Format:
+    
+    ### AS-IS/TO-BE Analysis & Design
+    ... (Detailed Analysis here) ...
 
     ```json
     [
       {{
-        "title": "[Task] Setup Project Structure",
-        "body": "Initialize the repository and basic Gradle setup."
-      }},
-      {{
-        "title": "[Task] Implement Login Feature",
-        "body": "Create LoginActivity and handle authentication logic."
+        "title": "[Task] Extract GetTasksUseCase",
+        "body": "## Implementation Details\\n- Create `domain/usecase/GetTasksUseCase.kt`.\\n- Move logic from `TasksViewModel`.\\n\\n## Test Plan\\n- Create `GetTasksUseCaseTest.kt`.\\n- Verify logic with MockK."
       }}
     ]
     ```
@@ -81,7 +99,6 @@ def plan_epic(issue, api_key):
     # Post the plan as a comment on the issue
     issue.create_comment(response.text)
     print("Posted plan to issue.")
-
 def create_subtasks(issue, api_key):
     """
     Reads the last AI comment (containing JSON plan) and creates sub-issues.
