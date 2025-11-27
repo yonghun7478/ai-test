@@ -21,7 +21,8 @@ Your goal is to build a robust, testable, and maintainable architecture through 
     *   This granularity directly helps the automated workflow create manageable Sub-issues.
 
 3.  **Test-Driven Mindset:**
-    *   Ensure every logical change is accompanied by a failing test (Red) before the implementation (Green).
+    *   Ensure every logical change is accompanied by a failing **JVM Unit Test** (Red) before the implementation (Green).
+    *   **Strictly NO Instrumentation Tests:** Do NOT use `androidTest` or require an emulator/device. All verification must be done via JUnit/MockK/Robolectric.
 
 4.  **Context-Aware Implementation:**
     *   Always verify existing project conventions, libraries, and patterns before introducing new ones.

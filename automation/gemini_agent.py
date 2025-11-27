@@ -78,7 +78,9 @@ def plan_epic(issue, api_key):
     *   **Do NOT** create a task for "Design" or "Analysis". Part 1 covers that.
     *   Each task `body` **MUST** include:
         *   `## Implementation Details`: Exactly what files to change and how.
-        *   `## Test Plan`: Specifics on what tests to add/modify (New file? Existing file? Mocking strategy?).
+        *   `## Test Plan`: Specifics on what tests to add/modify.
+        *   **IMPORTANT:** Test Plan must rely ONLY on JVM Unit Tests (JUnit, MockK, Robolectric). Do NOT suggest manual testing or emulator-based instrumentation tests.
+        *   Focus on verifying the ViewModel state and Logic.
 
     Example Output Format:
     
@@ -175,6 +177,8 @@ def implement_task(issue, context_comment, api_key):
     Please generate the implementation code.
     
     IMPORTANT: Write the summary and comments in KOREAN.
+    IMPORTANT: Do NOT generate instrumentation tests (androidTest). Generate ONLY JVM unit tests (test).
+    IMPORTANT: Ensure the code passes unit tests without an emulator.
     
     Output format:
     ### FILE: path/to/file.kt
