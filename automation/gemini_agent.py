@@ -89,7 +89,7 @@ def plan_epic(issue, api_key):
     [
       {{
         "title": "[Task] GetTasksUseCase 추출",
-        "body": "## 구현 상세 내용\\n- `domain/usecase/GetTasksUseCase.kt` 생성.\\n- `TasksViewModel`에서 비즈니스 로직 이동.\\n\\n## 테스트 계획\\n- `GetTasksUseCaseTest.kt` 생성.\\n- MockK를 사용하여 로직 검증."
+        "body": "## 구현 상세 내용\n- `domain/usecase/GetTasksUseCase.kt` 생성.\n- `TasksViewModel`에서 비즈니스 로직 이동.\n\n## 테스트 계획\n- `GetTasksUseCaseTest.kt` 생성.\n- MockK를 사용하여 로직 검증."
       }}
     ]
     ```
@@ -100,6 +100,7 @@ def plan_epic(issue, api_key):
     # Post the plan as a comment on the issue
     issue.create_comment(response.text)
     print("Posted plan to issue.")
+
 def create_subtasks(issue, api_key):
     """
     Reads the last AI comment (containing JSON plan) and creates sub-issues.
@@ -158,30 +159,30 @@ def implement_task(issue, context_comment, api_key):
     
     print(f"Implementing Task #{issue.number} with context: {context_comment}")
 
-        # 1. Generate Implementation Plan & Code
-        prompt = f"""
-        You are a Senior Android Architect.
-        You are tasked to implement a specific feature (Sub-issue).
-        
-        Task Title: {issue.title}
-        Task Description:
-        {issue.body}
-        
-        IMPORTANT CONTEXT from User:
-        "{context_comment}"
-        (Use this context to understand dependencies, pre-merged PRs, or specific constraints.)
-        
-        Please generate the implementation code.
-        
-        IMPORTANT: Write the summary and comments in KOREAN.
-        
-        Output format:
-        ### FILE: path/to/file.kt
-        (Content)
-        ...
-        
-        Start with a brief summary (in Korean) of what you are going to do.
-        """    
+    # 1. Generate Implementation Plan & Code
+    prompt = f"""
+    You are a Senior Android Architect.
+    You are tasked to implement a specific feature (Sub-issue).
+    
+    Task Title: {issue.title}
+    Task Description:
+    {issue.body}
+    
+    IMPORTANT CONTEXT from User:
+    "{context_comment}"
+    (Use this context to understand dependencies, pre-merged PRs, or specific constraints.)
+    
+    Please generate the implementation code.
+    
+    IMPORTANT: Write the summary and comments in KOREAN.
+    
+    Output format:
+    ### FILE: path/to/file.kt
+    (Content)
+    ...
+    
+    Start with a brief summary (in Korean) of what you are going to do.
+    """
     response = model.generate_content(prompt)
     
     # Parse and write files
@@ -198,7 +199,7 @@ def implement_task(issue, context_comment, api_key):
     # 3. Create PR (handled by GitHub Actions via file system, or we can do it here via API?)
     # The current workflow prefers creating PR via the Action step using `peter-evans/create-pull-request`
     # because it handles git auth and branching nicely. 
-    # So we just leave the changes in the file system.
+    # So we just leave the changes in the file system. 
     
     # We will save the report to be used in the PR body
     report = f"""
