@@ -56,6 +56,7 @@ def plan_epic(issue, api_key):
     {issue.body}
 
     IMPORTANT: You must follow this structure in your response.
+    IMPORTANT: Write ALL content (Analysis, Design, Task Titles, Task Bodies) in KOREAN.
 
     ### Part 1: AS-IS/TO-BE Analysis & Design
     (Write this part as normal Markdown text BEFORE the JSON block)
@@ -82,13 +83,13 @@ def plan_epic(issue, api_key):
     Example Output Format:
     
     ### AS-IS/TO-BE Analysis & Design
-    ... (Detailed Analysis here) ...
+    ... (상세 분석 내용) ...
 
     ```json
     [
       {{
-        "title": "[Task] Extract GetTasksUseCase",
-        "body": "## Implementation Details\\n- Create `domain/usecase/GetTasksUseCase.kt`.\\n- Move logic from `TasksViewModel`.\\n\\n## Test Plan\\n- Create `GetTasksUseCaseTest.kt`.\\n- Verify logic with MockK."
+        "title": "[Task] GetTasksUseCase 추출",
+        "body": "## 구현 상세 내용\\n- `domain/usecase/GetTasksUseCase.kt` 생성.\\n- `TasksViewModel`에서 비즈니스 로직 이동.\\n\\n## 테스트 계획\\n- `GetTasksUseCaseTest.kt` 생성.\\n- MockK를 사용하여 로직 검증."
       }}
     ]
     ```
@@ -157,29 +158,30 @@ def implement_task(issue, context_comment, api_key):
     
     print(f"Implementing Task #{issue.number} with context: {context_comment}")
 
-    # 1. Generate Implementation Plan & Code
-    prompt = f"""
-    You are a Senior Android Architect.
-    You are tasked to implement a specific feature (Sub-issue).
-    
-    Task Title: {issue.title}
-    Task Description:
-    {issue.body}
-    
-    IMPORTANT CONTEXT from User:
-    "{context_comment}"
-    (Use this context to understand dependencies, pre-merged PRs, or specific constraints.)
-    
-    Please generate the implementation code. 
-    
-    Output format:
-    ### FILE: path/to/file.kt
-    (Content)
-    ...
-    
-    Start with a brief summary of what you are going to do.
-    """
-    
+        # 1. Generate Implementation Plan & Code
+        prompt = f"""
+        You are a Senior Android Architect.
+        You are tasked to implement a specific feature (Sub-issue).
+        
+        Task Title: {issue.title}
+        Task Description:
+        {issue.body}
+        
+        IMPORTANT CONTEXT from User:
+        "{context_comment}"
+        (Use this context to understand dependencies, pre-merged PRs, or specific constraints.)
+        
+        Please generate the implementation code.
+        
+        IMPORTANT: Write the summary and comments in KOREAN.
+        
+        Output format:
+        ### FILE: path/to/file.kt
+        (Content)
+        ...
+        
+        Start with a brief summary (in Korean) of what you are going to do.
+        """    
     response = model.generate_content(prompt)
     
     # Parse and write files
