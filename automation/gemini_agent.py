@@ -3,17 +3,17 @@ import sys
 import argparse
 import subprocess
 import re
+import json
 import google.generativeai as genai
 from github import Github
 from github import Auth
 
 # --- Configuration ---
-MODEL_3_0 = "gemini-3-pro-preview"
-MODEL_1_5 = "gemini-1.5-pro"
+MODEL_NAME = "gemini-3-pro-preview" # or gemini-pro if 1.5 is not available
 
 def get_model(api_key):
     genai.configure(api_key=api_key)
-    return MODEL_3_0
+    return genai.GenerativeModel(MODEL_NAME)
 
 def run_command(command):
     """Runs a shell command and returns (stdout, stderr, returncode)."""
@@ -39,133 +39,174 @@ def write_file(path, content):
         f.write(content)
     print(f"Wrote to {path}", flush=True)
 
-def generate_content_safe(model_name, prompt, api_key):
-    genai.configure(api_key=api_key)
-    try:
-        print(f"Attempting to generate with model: {model_name}", flush=True)
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        return response
-    except Exception as e:
-        print(f"Error with model {model_name}: {e}", flush=True)
-        # Fallback logic could be added here
-        raise e
-
 # --- AI Logic ---
 
-def generate_spec(issue_body, api_key):
+def plan_epic(issue, api_key):
+    """
+    Analyzes the Epic issue and suggests a breakdown of tasks.
+    """
+    model = get_model(api_key)
+    
     prompt = f"""
     You are a Senior Android Architect.
-    Create a detailed technical specification based on the following feature request (GitHub Issue).
+    The user has created an Epic Issue. Your goal is to analyze the requirements and propose a breakdown of Tasks (Sub-issues).
+
+    Epic Title: {issue.title}
+    Epic Description:
+    {issue.body}
+
+    Please provide a detailed plan in the following JSON format embedded in a Markdown comment: 
     
-    Format the output as Markdown.
-    
-    Template:
-    # Specification: [Feature Name]
+    Start your response with a brief analysis (text), then provide the tasks inside a JSON block.
 
-    ### Objective
-    ...
+    Example Output:
+    Based on the requirements, here is the breakdown...
 
-    ### User Story
-    ...
-
-    ### Acceptance Criteria
-    - [ ] ...
-
-    ### Technical Details
-    - **Files:** ...
-    
-    ### Implementation Plan
-    1. ...
-    2. ...
-
-    Issue Description:
-    {issue_body}
+    ```json
+    [
+      {{
+        "title": "[Task] Setup Project Structure",
+        "body": "Initialize the repository and basic Gradle setup."
+      }},
+      {{
+        "title": "[Task] Implement Login Feature",
+        "body": "Create LoginActivity and handle authentication logic."
+      }}
+    ]
+    ```
     """
-    response = generate_content_safe(MODEL_3_0, prompt, api_key)
-    return response.text
-
-def implement_feature(spec_content, api_key):
-    # 1. Generate Stubs
-    print("--- Phase 1: Generating Stubs ---", flush=True)
-    stub_prompt = f"""
-    Based on this specification, generate the MINIMAL STUB CODE (interfaces, empty classes, method signatures).
     
-    Specification:
-    {spec_content}
+    response = model.generate_content(prompt)
+    
+    # Post the plan as a comment on the issue
+    issue.create_comment(response.text)
+    print("Posted plan to issue.")
+
+def create_subtasks(issue, api_key):
+    """
+    Reads the last AI comment (containing JSON plan) and creates sub-issues.
+    """
+    # 1. Find the last comment by the bot (or check recent comments for JSON)
+    comments = issue.get_comments()
+    target_comment = None
+    
+    # Iterate backwards to find the latest plan
+    for comment in reversed(list(comments)):
+        if "```json" in comment.body:
+            target_comment = comment.body
+            break
+    
+    if not target_comment:
+        print("No JSON plan found in recent comments.")
+        return
+
+    # 2. Extract JSON
+    try:
+        json_match = re.search(r'```json\n(.*?)\n```', target_comment, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+            tasks = json.loads(json_str)
+            
+            created_issues_list = []
+            
+            for task in tasks:
+                print(f"Creating issue: {task['title']}")
+                new_issue = issue.repository.create_issue(
+                    title=task['title'],
+                    body=f"{task['body']}\n\nParent Epic: #{issue.number}"
+                )
+                created_issues_list.append(f"- [ ] #{new_issue.number} : {task['title']}")
+            
+            # 3. Update the Epic issue body with the task list
+            current_body = issue.body or ""
+            updated_body = current_body + "\n\n## Tasks\n" + "\n".join(created_issues_list)
+            issue.edit(body=updated_body)
+            
+            issue.create_comment(f"✅ Created {len(tasks)} sub-issues and linked them to this Epic.")
+            
+        else:
+            print("Could not parse JSON from the comment.")
+            
+    except Exception as e:
+        print(f"Error creating tasks: {e}")
+        issue.create_comment(f"❌ Error creating sub-issues: {e}")
+
+
+def implement_task(issue, context_comment, api_key):
+    """
+    Implements a sub-task based on the issue body and the trigger comment (context).
+    """
+    model = get_model(api_key)
+    
+    print(f"Implementing Task #{issue.number} with context: {context_comment}")
+
+    # 1. Generate Implementation Plan & Code
+    prompt = f"""
+    You are a Senior Android Architect.
+    You are tasked to implement a specific feature (Sub-issue).
+    
+    Task Title: {issue.title}
+    Task Description:
+    {issue.body}
+    
+    IMPORTANT CONTEXT from User:
+    "{context_comment}"
+    (Use this context to understand dependencies, pre-merged PRs, or specific constraints.)
+    
+    Please generate the implementation code. 
     
     Output format:
     ### FILE: path/to/file.kt
     (Content)
+    ...
+    
+    Start with a brief summary of what you are going to do.
     """
-    stub_response = generate_content_safe(MODEL_3_0, stub_prompt, api_key)
-    parse_and_write_files(stub_response.text)
+    
+    response = model.generate_content(prompt)
+    
+    # Parse and write files
+    files_created = parse_and_write_files(response.text)
+    
+    if not files_created:
+        print("No files were generated.")
+        return
 
-    # 2. Generate Tests
-    print("--- Phase 2: Generating Tests ---", flush=True)
-    test_prompt = f"""
-    Based on the specification and stubs, write Unit Tests.
-    The tests should compile but FAIL (Red state).
-    
-    Specification:
-    {spec_content}
-    
-    Output format:
-    ### FILE: path/to/test/file.kt
-    (Content)
-    """
-    test_response = generate_content_safe(MODEL_3_0, test_prompt, api_key)
-    parse_and_write_files(test_response.text)
+    # 2. Verify (Optional: Run tests)
+    # print("Running tests...")
+    # run_command("./gradlew testDebugUnitTest")
 
-    # 3. Implement Logic (One-Shot)
-    print("--- Phase 3: Implementing Logic ---", flush=True)
-    impl_prompt = f"""
-    Now that Stubs and Tests are in place, please provide the COMPLETE IMPLEMENTATION logic.
-    Fill in the function bodies and ensure the code compiles and passes the tests.
+    # 3. Create PR (handled by GitHub Actions via file system, or we can do it here via API?)
+    # The current workflow prefers creating PR via the Action step using `peter-evans/create-pull-request`
+    # because it handles git auth and branching nicely. 
+    # So we just leave the changes in the file system.
     
-    Specification:
-    {spec_content}
-    
-    Output format:
-    ### FILE: path/to/file.kt
-    (Content)
-    """
-    impl_response = generate_content_safe(MODEL_3_0, impl_prompt, api_key)
-    parse_and_write_files(impl_response.text)
-
-    # 4. Final Verification (Run Once)
-    print("--- Phase 4: Final Verification ---", flush=True)
-    stdout, stderr, returncode = run_command("./gradlew testDebugUnitTest")
-    
-    test_result = "PASSED" if returncode == 0 else "FAILED"
-    log_content = (stdout + stderr)[-5000:]
-    
-    print(f"Tests finished with status: {test_result}", flush=True)
-
-    # Write Report
+    # We will save the report to be used in the PR body
     report = f"""
-# Implementation Result
-
-**Status:** {test_result}
-
-## Test Logs
-```
-{log_content}
-```
+    # Implementation Report for #{issue.number}
+    
+    ## Context
+    {context_comment}
+    
+    ## AI Analysis
+    {response.text[:500]}... (truncated)
     """
-    write_file("implementation_result.md", report)
-    return True # Always return true to allow PR creation
+    write_file("implementation_report.md", report)
+
 
 def parse_and_write_files(llm_output):
     parts = llm_output.split("### FILE: ")
+    files_written = []
     for part in parts[1:]:
         lines = part.splitlines()
         filepath = lines[0].strip()
         content = "\n".join(lines[1:])
-        # Basic cleanup of markdown code blocks
+        # Cleanup markdown code blocks
         content = re.sub(r'^```\w*\n', '', content)
         content = re.sub(r'\n```$', '', content)
         write_file(filepath.strip(), content)
+        files_written.append(filepath)
+    return files_written
 
 # --- Main ---
 
@@ -174,50 +215,35 @@ def main():
     GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
     REPO_NAME = os.environ.get("GITHUB_REPOSITORY")
     ISSUE_NUMBER = os.environ.get("ISSUE_NUMBER")
+    COMMENT_BODY = os.environ.get("COMMENT_BODY") # Passed from workflow
 
     if not API_KEY:
         print("Error: GEMINI_API_KEY is missing.", flush=True)
         sys.exit(1)
 
+    if not GITHUB_TOKEN or not REPO_NAME or not ISSUE_NUMBER:
+        print("Error: Github context missing.", flush=True)
+        sys.exit(1)
+
+    g = Github(auth=Auth.Token(GITHUB_TOKEN))
+    repo = g.get_repo(REPO_NAME)
+    issue = repo.get_issue(int(ISSUE_NUMBER))
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["spec", "implement"])
+    parser.add_argument("mode", choices=["plan", "create-tasks", "implement"])
     args = parser.parse_args()
 
-    if args.mode == "spec":
-        if not GITHUB_TOKEN or not REPO_NAME or not ISSUE_NUMBER:
-            print("Error: Github context missing.", flush=True)
-            sys.exit(1)
-            
-        g = Github(auth=Auth.Token(GITHUB_TOKEN))
-        repo = g.get_repo(REPO_NAME)
-        issue = repo.get_issue(int(ISSUE_NUMBER))
-        
-        print(f"Generating spec for Issue #{ISSUE_NUMBER}", flush=True)
-        spec = generate_spec(issue.body, API_KEY)
-        
-        # Write spec to file
-        file_path = f"docs/specs/issue-{ISSUE_NUMBER}.md"
-        write_file(file_path, spec)
-        print(f"::set-output name=spec_path::{file_path}") # For Github Actions
+    if args.mode == "plan":
+        print(f"Planning for Issue #{ISSUE_NUMBER}")
+        plan_epic(issue, API_KEY)
+
+    elif args.mode == "create-tasks":
+        print(f"Creating tasks for Issue #{ISSUE_NUMBER}")
+        create_subtasks(issue, API_KEY)
 
     elif args.mode == "implement":
-        # In this flow, we assume the spec is already in the repo (merged)
-        # We look for docs/specs/issue-{ISSUE_NUMBER}.md
-        
-        if not ISSUE_NUMBER:
-             print("Error: ISSUE_NUMBER env var required to find the spec.", flush=True)
-             sys.exit(1)
-
-        spec_path = f"docs/specs/issue-{ISSUE_NUMBER}.md"
-        spec_content = read_file(spec_path)
-        
-        if not spec_content:
-            print(f"Error: Spec file not found at {spec_path}", flush=True)
-            # Try to fail gracefully or exit? 
-            # The user wants a PR regardless, but without a spec we can't do anything.
-            sys.exit(1)
-
-        implement_feature(spec_content, API_KEY)
+        print(f"Implementing Issue #{ISSUE_NUMBER}")
+        implement_task(issue, COMMENT_BODY, API_KEY)
 
 if __name__ == "__main__":
     main()

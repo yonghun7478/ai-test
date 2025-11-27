@@ -1,0 +1,95 @@
+name: Gemini AI Interaction
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  gemini-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r automation/requirements.txt
+
+      # --- 1. PLAN ---
+      - name: Analyze Epic (Plan)
+        if: contains(github.event.comment.body, '/plan')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python automation/gemini_agent.py plan
+
+      # --- 2. CREATE TASKS ---
+      - name: Create Sub-tasks
+        if: contains(github.event.comment.body, '/approve')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python automation/gemini_agent.py create-tasks
+
+      # --- 3. IMPLEMENT ---
+      - name: Implement Task
+        if: contains(github.event.comment.body, '/implement')
+        id: implement_step
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          python automation/gemini_agent.py implement
+          echo "implemented=true" >> $GITHUB_OUTPUT
+
+      - name: Read Report
+        if: steps.implement_step.outputs.implemented == 'true'
+        id: read_report
+        run: |
+          if [ -f implementation_report.md ]; then
+            REPORT=$(cat implementation_report.md)
+            echo "REPORT_BODY<<EOF" >> $GITHUB_ENV
+            echo "$REPORT" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "REPORT_BODY=Implemented by Gemini." >> $GITHUB_ENV
+          fi
+
+      - name: Create Pull Request
+        if: steps.implement_step.outputs.implemented == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "feat: Implement Task #${{ github.event.issue.number }}"
+          title: "feat: Implementation for Task #${{ github.event.issue.number }}"
+          body: |
+            ${{ env.REPORT_BODY }}
+            
+            Closes #${{ github.event.issue.number }}
+          branch: "feat/issue-${{ github.event.issue.number }}"
+          base: main
+          delete-branch: true
