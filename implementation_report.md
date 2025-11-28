@@ -1,16 +1,23 @@
 
-    # Implementation Report for #16
+    # Implementation Report for #17
     
     ## Context
-    /implement #15 참고해서 철저하게 #16 구현해 !!
+    /implement 메인 이슈는 이거고#15,  과거에 작업한 #20 PR이야. #17을 작업을 철저하게 진행해 !
     
     ## AI Analysis
-    이 작업은 **Epic #15(Task 도메인 및 데이터 레이어)**의 연장선으로, 완료된 태스크와 활성 태스크의 통계를 계산하는 도메인 로직을 구현하는 것입니다.
+    이 작업은 통계 화면(Statistics Screen)의 UI 상태를 관리하기 위한 `StatisticsUiState` 데이터 클래스를 정의하는 것입니다.
 
-기존에 구현되어 있다고 가정하는 `Task` 모델과 `TasksRepository` 인터페이스를 활용하여, **통계 데이터 모델(`Statistics`)**과 **통계 계산 유즈케이스(`GetStatisticsUseCase`)**를 작성하고, 이에 대한 **단위 테스트**를 MockK를 사용하여 구현하겠습니다.
+**요약:**
+1.  **UI 상태 정의**: `StatisticsUiState` 데이터 클래스를 생성하여 로딩, 통계 수치(활성/완료 백분율), 데이터 없음, 에러 상태를 캡슐화합니다.
+2.  **초기 상태 제공**: ViewModel 등에서 초기값으로 즉시 사용할 수 있도록 `companion object` 내에 `Initial` 상태를 정의합니다.
+3.  **단위 테스트**: 데이터 클래스가 의도대로 생성되고 수정(copy)되는지 확인하는 JVM 단위 테스트를 작성합니다.
 
-### 구현 요약
-1.  **`domain/model/Statistics.kt`**: 활성/완료 태스크의 개수와 백분율을 담는 불변 데이터 클래스를 정의합니다.
-2.  **`domain/usecase/GetStatisticsUseCase.kt`**: `TasksRepository`의 `Flow` 데이터를 구독하여 실시간으로 통계를 계산하고 `Statistics` 객체로 변환하여 방출합니다.
-3.  **`doma... (truncated)
+---
+
+### FILE: app/src/main/java/com/example/todo/statistics/StatisticsUiState.kt
+```kotlin
+package com.example.todo.statistics
+
+/**
+ * 통계 화면... (truncated)
     
